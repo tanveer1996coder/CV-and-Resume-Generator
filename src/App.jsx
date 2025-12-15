@@ -34,6 +34,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/how-to-use" element={<HowToUse />} />
+        <Route path="/resume" element={<BuildResume />} />
         <Route path="/build-resume" element={<BuildResume />} />
         <Route path="/build-cover-letter" element={<BuildCoverLetter />} />
         <Route path="/build-cv" element={<BuildCV />} />

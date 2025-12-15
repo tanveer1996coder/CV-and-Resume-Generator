@@ -8,6 +8,7 @@ import { extractTextFromPDF } from '../utils/pdfParser';
 import { parseResumeText } from '../utils/resumeParser';
 import { optimizeText, generateSummary } from '../utils/aiService';
 import { calculateATSScore, getScoreCategory, getATSRecommendations } from '../utils/atsScorer';
+import { colorThemes, fontPairings, layouts } from '../utils/templates';
 
 
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -26,46 +27,18 @@ export default function BuildResume() {
 
     return (
         <div className="container" style={{ padding: '4rem 1rem' }}>
-            {step === 'choice' && <ChoiceStep onNext={(type) => setStep(type === 'new' ? 'wizard' : 'upload')} onUpload={(data) => { setResumeData(prev => ({ ...prev, ...data })); setStep('wizard'); }} />}
+            {step === 'choice' && <ChoiceStep onNext={(type) => setStep(type === 'new' ? 'wizard' : 'smart-rewrite')} />}
             {step === 'wizard' && <WizardStep data={resumeData} setData={setResumeData} onNext={() => setStep('template')} />}
-            {step === 'template' && <TemplateStep onNext={(id) => { setSelectedTemplate(id); setStep('editor'); }} />}
+            {step === 'template' && <TemplateStep onNext={(config) => { setSelectedTemplate(config); setStep('editor'); }} />}
             {step === 'editor' && <EditorStep data={resumeData} setData={setResumeData} template={selectedTemplate} />}
-            {step === 'upload' && <div className="glass p-8">Upload feature coming sort of soon... <button onClick={() => setStep('choice')}>Back</button></div>}
+            {step === 'smart-rewrite' && <SmartRewriteStep onNext={(data) => { setResumeData(prev => ({ ...prev, ...data })); setStep('template'); }} onCancel={() => setStep('choice')} />}
         </div>
     );
 }
 
-function ChoiceStep({ onNext, onUpload }) {
-    const fileInputRef = React.useRef(null);
-
-    const handleFileChange = async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        try {
-            // For now only PDF, but logic is extensible
-            if (file.type === 'application/pdf') {
-                const text = await extractTextFromPDF(file);
-                const parsedData = parseResumeText(text);
-                onUpload(parsedData);
-            } else {
-                alert("Please upload a PDF file for now.");
-            }
-        } catch (error) {
-            console.error("Upload failed", error);
-            alert("Failed to read file.");
-        }
-    };
-
+function ChoiceStep({ onNext }) {
     return (
         <div style={{ maxWidth: '900px', margin: '0 auto', textAlign: 'center' }}>
-            <input
-                type="file"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                accept=".pdf"
-                onChange={handleFileChange}
-            />
             <h1 style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>How would you like to start?</h1>
             <p style={{ color: '#94a3b8', fontSize: '1.2rem', marginBottom: '4rem' }}>
                 Choose the best way to create your professional resume.
@@ -101,9 +74,9 @@ function ChoiceStep({ onNext, onUpload }) {
                     </div>
                 </button>
 
-                {/* Upload Card */}
+                {/* AI Generate Card */}
                 <button
-                    onClick={() => fileInputRef.current.click()}
+                    onClick={() => onNext('smart-rewrite')}
                     className="glass hover-scale"
                     style={{
                         padding: '3rem',
@@ -112,24 +85,180 @@ function ChoiceStep({ onNext, onUpload }) {
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '1.5rem',
-                        background: 'var(--glass-bg)',
+                        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(236, 72, 153, 0.1))',
                         border: '1px solid var(--glass-border)',
                         color: 'inherit',
                         transition: 'all 0.3s'
                     }}
                 >
                     <div style={{ background: 'rgba(236, 72, 153, 0.2)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Upload size={32} color="#f472b6" />
+                        <Sparkles size={32} color="#f472b6" />
                     </div>
                     <div>
-                        <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>Upload Existing</h3>
-                        <p style={{ color: '#94a3b8', lineHeight: '1.5' }}>Upload your current PDF resume and we'll help you redesign and optimize it.</p>
+                        <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>Smart AI Rewrite</h3>
+                        <p style={{ color: '#94a3b8', lineHeight: '1.5' }}>Upload your resume & job description. AI will rewrite it to match the role perfectly.</p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--secondary)', fontWeight: 'bold', marginTop: 'auto' }}>
-                        Upload Resume <ArrowRight size={20} />
+                        Generate for Job <ArrowRight size={20} />
                     </div>
                 </button>
             </div>
+        </div>
+    );
+}
+
+function SmartRewriteStep({ onNext, onCancel }) {
+    const fileInputRef = useRef(null);
+    const [file, setFile] = useState(null);
+    const [jobDescription, setJobDescription] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [status, setStatus] = useState('');
+
+    const handleProcess = async () => {
+        if (!file || !jobDescription) {
+            alert("Please upload a file and enter a job description.");
+            return;
+        }
+
+        setIsProcessing(true);
+
+        try {
+            // 1. Extract Text
+            setStatus('Reading Resume PDF...');
+            const text = await extractTextFromPDF(file);
+            const parsedData = parseResumeText(text);
+
+            // 2. Rewrite Summary
+            setStatus('AI is rewriting your Professional Summary...');
+            const newSummary = await generateSummary(parsedData, jobDescription);
+            parsedData.personal.summary = newSummary;
+
+            // 3. Rewrite Experience
+            setStatus('AI is optimizing your Experience bullets...');
+            if (parsedData.experience && parsedData.experience.length > 0) {
+                const optimizedExp = await Promise.all(parsedData.experience.map(async (exp) => {
+                    const optimizedDesc = await optimizeText(exp.description, 'experience description', jobDescription);
+                    return { ...exp, description: optimizedDesc };
+                }));
+                parsedData.experience = optimizedExp;
+            }
+
+            // 4. Optimize Skills (optional, simple extraction/matching)
+            // For now, we trust the parser or let user edit.
+
+            setStatus('Refining final details...');
+            // Add a small delay for effect
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            onNext(parsedData);
+
+        } catch (error) {
+            console.error("AI Processing Error:", error);
+            alert("An error occurred during AI processing. Please check your API key and try again.");
+            setIsProcessing(false);
+            setStatus('');
+        }
+    };
+
+    return (
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            <button onClick={onCancel} style={{ marginBottom: '2rem', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} /> Back
+            </button>
+
+            <h2 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Smart AI Rewrite</h2>
+            <p style={{ color: '#94a3b8', marginBottom: '3rem' }}>
+                We'll extract your resume content and use AI to rewrite it specifically for the job you're applying to.
+            </p>
+
+            <div className="glass" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                <div style={{ marginBottom: '2rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>1. Upload Current Resume (PDF)</label>
+                    <div
+                        onClick={() => fileInputRef.current.click()}
+                        style={{
+                            border: '2px dashed var(--glass-border)',
+                            borderRadius: '8px',
+                            padding: '2rem',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            background: file ? 'rgba(52, 211, 153, 0.1)' : 'transparent'
+                        }}
+                    >
+                        <input type="file" ref={fileInputRef} onChange={(e) => setFile(e.target.files[0])} accept=".pdf" style={{ display: 'none' }} />
+                        {file ? (
+                            <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                <CheckCircle size={24} /> {file.name} Selected
+                            </div>
+                        ) : (
+                            <div style={{ color: '#94a3b8' }}>
+                                <Upload size={32} style={{ marginBottom: '0.5rem' }} />
+                                <p>Click to upload PDF</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: '2rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>2. Paste Job Description</label>
+                    <textarea
+                        value={jobDescription}
+                        onChange={(e) => setJobDescription(e.target.value)}
+                        placeholder="Paste the full job description here..."
+                        style={{
+                            width: '100%',
+                            height: '200px',
+                            background: 'rgba(0,0,0,0.2)',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: '8px',
+                            padding: '1rem',
+                            color: 'white',
+                            resize: 'vertical'
+                        }}
+                    />
+                </div>
+
+                <button
+                    onClick={handleProcess}
+                    disabled={isProcessing}
+                    style={{
+                        width: '100%',
+                        padding: '1rem',
+                        background: isProcessing ? 'gray' : 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '1.1rem',
+                        fontWeight: 'bold',
+                        cursor: isProcessing ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.75rem'
+                    }}
+                >
+                    {isProcessing ? (
+                        <>Processing... <span className="animate-spin">⏳</span></>
+                    ) : (
+                        <>Analyze & Rewrite <Sparkles size={20} /></>
+                    )}
+                </button>
+            </div>
+
+            {isProcessing && (
+                <div style={{ textAlign: 'center', color: '#94a3b8', animation: 'fadeIn 0.5s' }}>
+                    <p style={{ fontSize: '1.2rem' }}>{status}</p>
+                    <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.1)', marginTop: '1rem', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{
+                            width: '50%',
+                            height: '100%',
+                            background: 'var(--primary)',
+                            animation: 'slideUp 2s infinite linear',
+                            transformOrigin: 'left'
+                        }}></div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -484,45 +613,178 @@ function Input({ label, placeholder, value, onChange }) {
 }
 
 function TemplateStep({ onNext }) {
-    const templates = [
-        { id: 'modern', name: 'Modern', color: '#8b5cf6', description: 'Clean and colorful, perfect for tech and creative roles.' },
-        { id: 'professional', name: 'Professional', color: '#3b82f6', description: 'Traditional and structured, great for corporate jobs.' },
-        { id: 'minimal', name: 'Minimal', color: '#64748b', description: 'Simple and elegant, focused purely on content.' }
-    ];
+    const [config, setConfig] = useState({
+        layout: 'modern',
+        theme: 'slate',
+        font: 'inter'
+    });
 
     return (
-        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-            <h1 style={{ fontSize: '3rem', marginBottom: '1.5rem', textAlign: 'center' }}>Choose a Template</h1>
-            <p style={{ color: '#94a3b8', fontSize: '1.2rem', marginBottom: '4rem', textAlign: 'center' }}>
-                Select a design that fits your personal brand. You can change this later.
-            </p>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '350px 1fr', gap: '2rem', minHeight: '80vh' }}>
+            {/* Left Sidebar - Design Controls */}
+            <div className="glass" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem', height: 'fit-content' }}>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Sparkles size={20} color="var(--primary)" /> Design Studio
+                </h2>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
-                {templates.map(template => (
+                {/* Layout Selection */}
+                <section>
+                    <label style={{ display: 'block', marginBottom: '1rem', color: '#94a3b8', fontSize: '0.9rem', fontWeight: 'bold' }}>LAYOUT STRUCTURE</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                        {layouts.map(l => (
+                            <button
+                                key={l.id}
+                                onClick={() => setConfig(prev => ({ ...prev, layout: l.id }))}
+                                style={{
+                                    padding: '1rem',
+                                    textAlign: 'left',
+                                    background: config.layout === l.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                                    border: config.layout === l.id ? 'none' : '1px solid var(--glass-border)',
+                                    borderRadius: '8px',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    fontWeight: config.layout === l.id ? 'bold' : 'normal',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}
+                            >
+                                {l.name}
+                                {config.layout === l.id && <CheckCircle size={16} />}
+                            </button>
+                        ))}
+                    </div>
+                </section>
+
+                {/* Color Theme Selection */}
+                <section>
+                    <label style={{ display: 'block', marginBottom: '1rem', color: '#94a3b8', fontSize: '0.9rem', fontWeight: 'bold' }}>COLOR PALETTE</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+                        {Object.entries(colorThemes).map(([key, value]) => (
+                            <button
+                                key={key}
+                                onClick={() => setConfig(prev => ({ ...prev, theme: key }))}
+                                title={key}
+                                style={{
+                                    width: '100%',
+                                    aspectRatio: '1',
+                                    borderRadius: '50%',
+                                    background: value.primary,
+                                    border: config.theme === key ? '3px solid white' : '2px solid transparent',
+                                    cursor: 'pointer',
+                                    boxShadow: config.theme === key ? '0 0 0 2px var(--primary)' : 'none',
+                                    transition: 'all 0.2s'
+                                }}
+                            />
+                        ))}
+                    </div>
+                </section>
+
+                {/* Font Selection */}
+                <section>
+                    <label style={{ display: 'block', marginBottom: '1rem', color: '#94a3b8', fontSize: '0.9rem', fontWeight: 'bold' }}>TYPOGRAPHY</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.5rem' }}>
+                        {Object.entries(fontPairings).map(([key, value]) => (
+                            <button
+                                key={key}
+                                onClick={() => setConfig(prev => ({ ...prev, font: key }))}
+                                style={{
+                                    padding: '0.75rem',
+                                    borderRadius: '6px',
+                                    background: config.font === key ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                    border: 'none',
+                                    color: 'white',
+                                    textAlign: 'left',
+                                    cursor: 'pointer',
+                                    fontFamily: value.header.replace(/"/g, ''),
+                                    fontSize: '1rem'
+                                }}
+                            >
+                                Aa • {key.charAt(0).toUpperCase() + key.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                </section>
+
+                <div style={{ marginTop: 'auto' }}>
                     <button
-                        key={template.id}
-                        onClick={() => onNext(template.id)}
-                        className="glass hover-scale"
+                        onClick={() => onNext(config)}
+                        className="glass"
                         style={{
-                            padding: '2rem',
-                            textAlign: 'left',
-                            cursor: 'pointer',
+                            width: '100%',
+                            padding: '1rem',
                             display: 'flex',
-                            flexDirection: 'column',
-                            gap: '1rem',
-                            background: 'var(--glass-bg)',
-                            border: '1px solid var(--glass-border)',
-                            color: 'inherit',
-                            transition: 'all 0.3s'
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            background: 'var(--primary)',
+                            color: 'white',
+                            border: 'none',
+                            fontWeight: 'bold',
+                            cursor: 'pointer'
                         }}
                     >
-                        <div style={{ height: '300px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${template.color} ` }}>
-                            <span style={{ fontSize: '1.5rem', color: template.color, fontWeight: 'bold' }}>{template.name} Preview</span>
-                        </div>
-                        <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{template.name}</h3>
-                        <p style={{ color: '#94a3b8', lineHeight: '1.5' }}>{template.description}</p>
+                        Use This Design <ArrowRight size={20} />
                     </button>
-                ))}
+                </div>
+            </div>
+
+            {/* Right Preview Area */}
+            <div className="glass" style={{ padding: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', overflow: 'hidden' }}>
+                <div style={{
+                    width: '380px',
+                    height: '540px',
+                    background: 'white',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    fontFamily: fontPairings[config.font].body.replace(/"/g, ''),
+                    borderRadius: '4px'
+                }}>
+                    {/* Header Mockup */}
+                    <div style={{
+                        height: config.layout === 'creative' ? '150px' : '80px',
+                        background: config.layout === 'minimal' ? 'white' : colorThemes[config.theme].primary,
+                        color: config.layout === 'minimal' ? 'black' : 'white',
+                        padding: '1.5rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        borderBottom: config.layout === 'minimal' ? `2px solid ${colorThemes[config.theme].primary}` : 'none'
+                    }}>
+                        <div style={{ width: '60%', height: '12px', background: 'currentColor', opacity: 0.9, marginBottom: '8px', borderRadius: '2px' }}></div>
+                        <div style={{ width: '40%', height: '8px', background: 'currentColor', opacity: 0.7, borderRadius: '2px' }}></div>
+                    </div>
+
+                    <div style={{ flex: 1, display: 'flex' }}>
+                        {/* Sidebar Mockup (if applicable) */}
+                        {(config.layout === 'modern' || config.layout === 'executive') && (
+                            <div style={{
+                                width: '30%',
+                                background: config.layout === 'modern' ? colorThemes[config.theme].secondary : '#f1f5f9',
+                                padding: '1rem'
+                            }}>
+                                <div style={{ width: '80%', height: '8px', background: 'rgba(0,0,0,0.1)', marginBottom: '20px' }}></div>
+                                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.1)', marginBottom: '8px' }}></div>
+                                <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.1)', marginBottom: '8px' }}></div>
+                            </div>
+                        )}
+
+                        {/* Main Body Mockup */}
+                        <div style={{ flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {[1, 2, 3].map(i => (
+                                <div key={i}>
+                                    <div style={{ width: '30%', height: '10px', background: colorThemes[config.theme].primary, marginBottom: '8px', opacity: 0.8 }}></div>
+                                    <div style={{ width: '100%', height: '6px', background: '#cbd5e1', marginBottom: '4px' }}></div>
+                                    <div style={{ width: '90%', height: '6px', background: '#cbd5e1', marginBottom: '4px' }}></div>
+                                    <div style={{ width: '40%', height: '6px', background: '#cbd5e1', marginBottom: '4px' }}></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -802,105 +1064,222 @@ function EditorStep({ data, setData, template }) {
                         background: 'white',
                         width: '210mm',
                         minHeight: '297mm',
-                        padding: '15mm',
-                        color: 'black',
                         boxShadow: '0 0 20px rgba(0,0,0,0.3)',
                         transformOrigin: 'top center',
-                        transform: 'scale(0.9)', // Scale down slightly to fit comfortably
-                        position: 'relative'
+                        transform: 'scale(0.9)',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'column'
                     }}
                 >
-                    {/* Header */}
-                    <div style={{ borderBottom: `2px solid ${template === 'modern' ? '#8b5cf6' : '#333'}`, paddingBottom: '1.5rem', marginBottom: '2rem' }}>
-                        <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', margin: 0, color: template === 'modern' ? '#8b5cf6' : '#000' }}>{data.personal.fullName || 'Your Name'}</h1>
-                        <p style={{ fontSize: '1.2rem', color: '#555', marginTop: '0.5rem' }}>{data.personal.title || 'Your Job Title'}</p>
-                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', fontSize: '0.9rem', color: '#666' }}>
-                            <span>{data.personal.email}</span>
-                            <span>|</span>
-                            <span>{data.personal.phone}</span>
+                    <ResumeRenderer data={data} template={template} sectionOrder={sectionOrder} />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ResumeRenderer({ data, template, sectionOrder }) {
+    // Safety check for legacy string templates or missing config
+    const safeTemplate = typeof template === 'string'
+        ? { layout: 'modern', theme: 'slate', font: 'inter' }
+        : (template || { layout: 'modern', theme: 'slate', font: 'inter' });
+
+    const { layout, theme, font } = safeTemplate;
+
+    // Get theme values with fallbacks
+    const activeTheme = colorThemes[theme] || colorThemes.slate;
+    const activeFont = fontPairings[font] || fontPairings.inter;
+
+    const styles = {
+        container: {
+            fontFamily: activeFont.body.replace(/"/g, ''),
+            color: activeTheme.secondary, // Body text color
+            height: '100%',
+            display: 'flex',
+            flexDirection: layout === 'modern' || layout === 'executive' ? 'row' : 'column'
+        },
+        header: {
+            background: layout === 'minimal' ? 'white' : activeTheme.primary,
+            color: layout === 'minimal' ? activeTheme.primary : 'white',
+            padding: '2rem',
+            textAlign: layout === 'creative' ? 'center' : 'left',
+            borderBottom: layout === 'minimal' ? `2px solid ${activeTheme.primary}` : 'none'
+        },
+        sidebar: {
+            width: '30%',
+            background: activeTheme.accent,
+            padding: '1.5rem',
+            color: '#334155',
+            display: (layout === 'modern' || layout === 'executive') ? 'block' : 'none'
+        },
+        main: {
+            flex: 1,
+            padding: '2rem',
+            background: 'white'
+        },
+        sectionTitle: {
+            fontSize: '1.1rem',
+            fontWeight: 'bold',
+            color: activeTheme.primary,
+            borderBottom: `2px solid ${activeTheme.accent}`,
+            paddingBottom: '0.5rem',
+            marginBottom: '1rem',
+            textTransform: 'uppercase',
+            letterSpacing: '1px'
+        }
+    };
+
+    // Helper to render a section
+    const renderSection = (id) => {
+        switch (id) {
+            case 'summary':
+                return data.personal.summary && (
+                    <div key="summary" style={{ marginBottom: '2rem' }}>
+                        <h3 style={styles.sectionTitle}>Professional Summary</h3>
+                        <p style={{ lineHeight: '1.6', color: '#334155' }}>{data.personal.summary}</p>
+                    </div>
+                );
+            case 'experience':
+                return data.experience.length > 0 && (
+                    <div key="experience" style={{ marginBottom: '2rem' }}>
+                        <h3 style={styles.sectionTitle}>Experience</h3>
+                        {data.experience.map((exp, i) => (
+                            <div key={i} style={{ marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1e293b' }}>{exp.role}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{exp.start} - {exp.end}</div>
+                                </div>
+                                <div style={{ fontWeight: '500', color: activeTheme.primary, marginBottom: '0.5rem' }}>{exp.company}</div>
+                                <p style={{ lineHeight: '1.5', color: '#475569', whiteSpace: 'pre-wrap' }}>{exp.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                );
+            case 'education':
+                return data.education.length > 0 && (
+                    <div key="education" style={{ marginBottom: '2rem' }}>
+                        <h3 style={styles.sectionTitle}>Education</h3>
+                        {data.education.map((edu, i) => (
+                            <div key={i} style={{ marginBottom: '1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <div style={{ fontWeight: 'bold' }}>{edu.school}</div>
+                                    <div style={{ color: '#64748b' }}>{edu.year}</div>
+                                </div>
+                                <div style={{ color: '#475569' }}>{edu.degree} in {edu.field}</div>
+                            </div>
+                        ))}
+                    </div>
+                );
+            case 'skills':
+                return data.skills && (
+                    <div key="skills" style={{ marginBottom: '2rem' }}>
+                        <h3 style={styles.sectionTitle}>Skills</h3>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            {data.skills.split(',').map((skill, i) => (
+                                <span key={i} style={{ background: activeTheme.accent, padding: '0.25rem 0.75rem', borderRadius: '4px', fontSize: '0.9rem', color: '#334155', fontWeight: '500' }}>
+                                    {skill.trim()}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                );
+            default:
+                return null;
+        }
+    };
+
+    // Layout Logic
+    if (layout === 'modern' || layout === 'executive') {
+        // Two Column Layout
+        return (
+            <div style={styles.container}>
+                <aside style={styles.sidebar}>
+                    {/* Sidebar Content: Contact, Skills, maybe Education? */}
+                    <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
+                        {/* Initials Avatar */}
+                        <div style={{
+                            width: '80px',
+                            height: '80px',
+                            borderRadius: '50%',
+                            background: activeTheme.primary,
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '2rem',
+                            fontWeight: 'bold',
+                            margin: '0 auto 1rem auto'
+                        }}>
+                            {data.personal.fullName ? data.personal.fullName.charAt(0) : 'Me'}
                         </div>
                     </div>
 
-                    {/* Summary */}
-                    {/* Watermark */}
-                    <div className="watermark-draft" data-html2canvas-ignore="true" style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%) rotate(-45deg)',
-                        fontSize: '8rem',
-                        fontWeight: 'bold',
-                        color: 'rgba(0,0,0,0.05)',
-                        pointerEvents: 'none',
-                        zIndex: 0,
-                        userSelect: 'none',
-                        whiteSpace: 'nowrap'
-                    }}>
-                        DRAFT
+                    <div style={{ marginBottom: '2rem' }}>
+                        <h4 style={{ color: activeTheme.primary, borderBottom: '1px solid #cbd5e1', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>Contact</h4>
+                        <div style={{ fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div>{data.personal.email}</div>
+                            <div>{data.personal.phone}</div>
+                        </div>
                     </div>
 
-                    {/* Dynamic Sections */}
-                    <div style={{ position: 'relative', zIndex: 1 }}>
-                        {sectionOrder.map(section => {
-                            switch (section.id) {
-                                case 'summary':
-                                    return data.personal.summary && (
-                                        <div key="summary" style={{ marginBottom: '2rem' }}>
-                                            <h3 style={{ borderBottom: '1px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '1rem', color: '#333' }}>Professional Summary</h3>
-                                            <p style={{ lineHeight: '1.6', color: '#444' }}>{data.personal.summary}</p>
-                                        </div>
-                                    );
-                                case 'experience':
-                                    return data.experience.length > 0 && (
-                                        <div key="experience" style={{ marginBottom: '2rem' }}>
-                                            <h3 style={{ borderBottom: '1px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '1rem', color: '#333' }}>Experience</h3>
-                                            {data.experience.map((exp, i) => (
-                                                <div key={i} style={{ marginBottom: '1.5rem' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{exp.role}</div>
-                                                        <div style={{ color: '#666' }}>{exp.start} - {exp.end}</div>
-                                                    </div>
-                                                    <div style={{ fontWeight: '500', color: '#444', marginBottom: '0.5rem' }}>{exp.company}</div>
-                                                    <p style={{ lineHeight: '1.5', color: '#555', whiteSpace: 'pre-wrap' }}>{exp.description}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    );
-                                case 'education':
-                                    return data.education.length > 0 && (
-                                        <div key="education" style={{ marginBottom: '2rem' }}>
-                                            <h3 style={{ borderBottom: '1px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '1rem', color: '#333' }}>Education</h3>
-                                            {data.education.map((edu, i) => (
-                                                <div key={i} style={{ marginBottom: '1rem' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                        <div style={{ fontWeight: 'bold' }}>{edu.school}</div>
-                                                        <div style={{ color: '#666' }}>{edu.year}</div>
-                                                    </div>
-                                                    <div>{edu.degree} in {edu.field}</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    );
-                                case 'skills':
-                                    return data.skills && (
-                                        <div key="skills">
-                                            <h3 style={{ borderBottom: '1px solid #ddd', paddingBottom: '0.5rem', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '1rem', color: '#333' }}>Skills</h3>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                {data.skills.split(',').map((skill, i) => (
-                                                    <span key={i} style={{ background: '#f3f4f6', padding: '0.25rem 0.75rem', borderRadius: '4px', fontSize: '0.9rem', color: '#374151' }}>
-                                                        {skill.trim()}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                default:
-                                    return null;
-                            }
-                        })}
-                    </div>
-                </div>
+                    {/* Render Skills in Sidebar for Modern */}
+                    {data.skills && (
+                        <div>
+                            <h4 style={{ color: activeTheme.primary, borderBottom: '1px solid #cbd5e1', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>Skills</h4>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                {data.skills.split(',').map((skill, i) => (
+                                    <span key={i} style={{ background: 'rgba(255,255,255,0.5)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem' }}>{skill.trim()}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </aside>
+                <main style={styles.main}>
+                    <header style={{ marginBottom: '2rem', borderBottom: `2px solid ${activeTheme.accent}`, paddingBottom: '1rem' }}>
+                        <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', color: activeTheme.primary, margin: 0 }}>{data.personal.fullName}</h1>
+                        <p style={{ fontSize: '1.2rem', color: activeTheme.secondary, marginTop: '0.5rem' }}>{data.personal.title}</p>
+                    </header>
+                    {sectionOrder.map(section => {
+                        if (section.id === 'skills') return null; // Handled in sidebar
+                        return renderSection(section.id);
+                    })}
+                </main>
             </div>
+        );
+    }
+
+    // Default One-Column Layout (Classic, Minimal, Creative)
+    return (
+        <div style={styles.container}>
+            <header style={styles.header}>
+                <h1 style={{ fontSize: '3rem', fontWeight: 'bold', margin: 0, fontFamily: activeFont.header.replace(/"/g, '') }}>{data.personal.fullName}</h1>
+                <p style={{ fontSize: '1.5rem', opacity: 0.9, marginTop: '0.5rem' }}>{data.personal.title}</p>
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', fontSize: '0.9rem', opacity: 0.8, justifyContent: layout === 'creative' ? 'center' : 'flex-start' }}>
+                    <span>{data.personal.email}</span>
+                    <span>•</span>
+                    <span>{data.personal.phone}</span>
+                </div>
+            </header>
+            <main style={styles.main}>
+                {/* Draft Watermark */}
+                <div className="watermark-draft" data-html2canvas-ignore="true" style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%) rotate(-45deg)',
+                    fontSize: '8rem',
+                    fontWeight: 'bold',
+                    color: 'rgba(0,0,0,0.03)',
+                    pointerEvents: 'none',
+                    zIndex: 0,
+                    userSelect: 'none',
+                    whiteSpace: 'nowrap'
+                }}>
+                    DRAFT
+                </div>
+                {sectionOrder.map(section => renderSection(section.id))}
+            </main>
         </div>
     );
 }

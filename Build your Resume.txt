@@ -1,0 +1,34 @@
+sketch
+i wnat to build a web-app with mainly 6 pages at the front, named as home, how to use, build your resume, build your cover
+letter, build your cv, and blog. home, how to use, and blog sections are self explainatory. however, rest of three should 
+move in such a way. 
+when user open build your resume, it show further two cards, i.e., create new resume and upload your resume to reconsturt
+or edit. after selecting create new resume, open the next page, where it is asking the basic questions about field, experience,
+and similar quesitons. based on the answer of these quesitons, show to suitable resume template. after selecting the template,
+it will open a new page, the editor page. The editor page will take all of the information and put it in the resume, for 
+real-time. allow the drag and drop different section at different place at resume. While it is building realtime, paste as
+much as possible watermark at the page to avoid piracy. allow user to download the gererated resume in .pdf, .txt, .jpg, and
+.docx format. In downloaded file, make sure everything look like the realtime building resume. other than basic personal
+information, add the content with AI or optimize different fileds with AI. View the ATS score for overall resume. for uploaded
+resume, follow the same format like I tell you for the create new resume in editor section. Make as much as possible template
+for each kind of job for different level of experience and education background. 
+similar add for build your cover letter and build your CV. Give the suggestions for each thing. similar to resume section,
+build as much as possible templates for various people. Always make it ATS friendy and also ensure that it should be 
+well designed. 
+
+Suggestions
+I've a few suggestions that will improve this web-app. What is your take on these suggestions. 
+1- Remove the upload existing resume section from resume seciton. 
+2- There are a very few and limited designs that are currently available in each section. I want to add about at least 50+ different designs for resume, cv, and cover
+letter. So, make a favor for me that add these designs which are attractive, engaging, well-crafted, and ATS friendly. 
+3- Inculcate the AI in the app. I'll give you openai api key for that. 
+4- People generate resume, cv, and cover letter for different jobs and reasons. each job or reason have different sort of requirements. I want you to add a card in each
+section, i.e., resume, cv, and cover letter. This section served as the follows
+- User upload the resume, cv, or cover letter.
+- Web-app extract all of the content from the uploaded resume, cv, or cover-letter. 
+- Web-app ask for the job requirement for which the user need new or updated cv, resume, or cover letter. 
+- Web-app rewrite the entire extracted content of the user according to the job requirement. 
+- After writing the content, ask user to select the ATS friendly engaging desings. 
+- After design selection, move the entire data to different section in cv, cover letter, or resume. 
+- Show the ATS score of new and uploaded resume, cv, or cover letter. 
+- Allow to download as the usual way, i.e., pdf, jpeg, or .txt formats. 

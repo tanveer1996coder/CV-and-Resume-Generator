@@ -1,54 +1,71 @@
-// Mock AI Service - Simulates AI-powered content optimization
-export const optimizeText = async (text, context = 'general') => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+// Real AI Service - powered by OpenAI
+const API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
-    if (!text || text.trim().length === 0) {
-        return text;
+export const optimizeText = async (text, context = 'general', jobDescription = '') => {
+    if (!text || text.trim().length === 0) return text;
+    if (!API_KEY || API_KEY.includes('paste_your_key')) {
+        console.warn("Missing OpenAI API Key");
+        return text + " [AI Mode: Key Missing]";
     }
 
-    // Simple text improvements using string replacements
-    let improved = text;
+    try {
+        const systemPrompt = `You are an expert Resume Writer and Career Coach. 
+        Your task is to rewrite the user's input text to be more professional, impactful, and ATS-friendly.
+        ${jobDescription ? `Optimize strictly for this Job Description: ${jobDescription.substring(0, 500)}...` : ''}
+        Use strong action verbs. Quantify results where possible. Keep it concise.`;
 
-    // Action verb improvements
-    const improvements = {
-        'worked on': 'spearheaded',
-        'helped': 'facilitated',
-        'made': 'engineered',
-        'did': 'executed',
-        'was responsible for': 'managed',
-        'created': 'developed',
-        'used': 'leveraged',
-        'improved': 'optimized',
-        'changed': 'transformed',
-        'handled': 'orchestrated'
-    };
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: `Rewrite this ${context}:\n${text}` }
+                ],
+                temperature: 0.7,
+                max_tokens: 300
+            })
+        });
 
-    Object.entries(improvements).forEach(([weak, strong]) => {
-        const regex = new RegExp(`\\b${weak}\\b`, 'gi');
-        improved = improved.replace(regex, strong);
-    });
-
-    // Add quantification suggestions (mock)
-    if (context === 'experience' && !improved.match(/\d+%|\d+ [a-z]+/i)) {
-        improved += ' [AI Suggestion: Add metrics or percentages to strengthen impact]';
+        const data = await response.json();
+        return data.choices[0].message.content.trim();
+    } catch (error) {
+        console.error("AI Request Failed:", error);
+        return text; // Fallback to original
     }
-
-    return improved;
 };
 
-export const generateSummary = async (data) => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+export const generateSummary = async (data, jobDescription = '') => {
+    if (!API_KEY || API_KEY.includes('paste_your_key')) return "AI Summary requires API Key in .env file.";
 
-    const { personal, experience, skills } = data;
+    const prompt = `Write a professional resume summary for:
+    Name: ${data.personal.fullName}
+    Title: ${data.personal.title}
+    Skills: ${data.skills}
+    Experience Count: ${data.experience.length} roles.
+    ${jobDescription ? `Tailor it for this Job: ${jobDescription.substring(0, 500)}...` : ''}
+    Keep it under 50 words. First person. Strong opening.`;
 
-    if (!personal.title) {
-        return 'Dynamic professional with proven track record of delivering results.';
+    try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.7
+            })
+        });
+        const resData = await response.json();
+        return resData.choices[0].message.content.trim();
+    } catch (e) {
+        return "Failed to generate summary.";
     }
-
-    const skillsList = skills ? skills.split(',').slice(0, 3).map(s => s.trim()).join(', ') : 'various skills';
-    const yearsExp = experience.length > 0 ? `${experience.length}+` : 'multiple';
-
-    return `Results-driven ${personal.title} with ${yearsExp} years of experience. Expertise in ${skillsList}. Proven ability to drive innovation and deliver exceptional outcomes.`;
 };

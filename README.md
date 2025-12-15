@@ -1,16 +1,17 @@
-# React + Vite
+# Resume-Generator
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Build Your Future with Premium Resumes, CVs, and Cover Letters
 
-Currently, two official plugins are available:
+**Resume-Generator** is a powerful React-based web application designed to help users create professional documents in minutes.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### Features
+- **Resume Builder**: Step-by-step wizard, AI-powered score analysis, and multi-template export.
+- **Cover Letter Builder**: Create matching cover letters with ease.
+- **CV Builder**: Dedicated flow for academic and research professionals (Publications, Grants, Matches).
+- **Real-Time Editor**: Drag-and-drop sections, live preview, and instant PDF generation.
 
-## React Compiler
+### Built With
+- React + Vite
+- JSPDF & HTML2Canvas
+- Lucide React Icons
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

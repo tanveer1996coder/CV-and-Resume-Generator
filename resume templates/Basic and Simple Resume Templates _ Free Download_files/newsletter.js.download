@@ -1,0 +1,768 @@
+window.downloadPopupForm = function(first_call = false) {
+    let downloadPopup = document.getElementById('newsletter-popup-wrap');
+    const noThanksBtn = downloadPopup.querySelector('.no-thanks-text');
+    let bodyElement = document.querySelector('body');
+    if (!!noThanksBtn) {
+        noThanksBtn.setAttribute('href', '#');
+        noThanksBtn.removeAttribute('download');
+        noThanksBtn.removeAttribute('data-quiz');
+    }
+    let zipfile = document.querySelectorAll('a[href$=".doc"], a[href$=".docx"], a[href$=".pdf"], a[href$=".zip"], a[href$=".odt"], a[href$=".pages"], a[href$=".tex"], a[href$=".indd"]');
+    let popupStep;
+    let popupStepReverse;
+    let popupClose;
+    let downloadStepFirst = downloadPopup.querySelector('.newsletter-popup-step-1');
+    let downloadStepSuccess = downloadPopup.querySelector('.newsletter-popup-step-2');
+    let submitButtonCheck;
+    let btnDownloadLink = downloadPopup.querySelector('.newsletter-popup-ctas .btn-underline');
+    let submitButton = downloadPopup.querySelector('.newsletter-popup-ctas .btn-secondary-multi');
+    let email;
+    let errors;
+    // const warningMsg = downloadPopup.querySelector('.newsletter-popup-form-warning');
+    const nameInput = downloadPopup.querySelector('.newsletter-popup-form-input-name');
+    const emailInput = downloadPopup.querySelector('.newsletter-popup-form-input-mail');
+    const gdprCheckbox = document.getElementById('newsletter-popup-gdpr-input');
+    const closePopup = downloadPopup.querySelector('.newsletter-popup-close');
+
+    let pos = 0;    
+    let anchorEvent;
+    let dont_show_popup = false;
+
+    function isiOSDevice() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    }
+
+    function disableBodyScroll() {
+        if (isiOSDevice()) {
+            pos = window.pageYOffset;
+            document.body.style.overflow = `hidden`;
+            document.body.style.position = `fixed`;
+            document.body.style.top = `-${pos}px`;
+            document.body.style.width = `100%`;
+        }
+        document.body.classList.add('body-lock');
+        document.documentElement.style.setProperty("scrollbar-gutter", "stable");
+    }
+
+    function enableBodyScroll() {
+        if (isiOSDevice()) {
+            document.body.style.removeProperty(`overflow`);
+            document.body.style.removeProperty(`position`);
+            document.body.style.removeProperty(`top`);
+            document.body.style.removeProperty(`width`);
+            window.scrollTo(0, pos);
+        }
+
+        setTimeout(() => {
+           document.querySelector('body').classList.remove('body-lock');
+           document.documentElement.removeAttribute("style");
+        }, 0);
+    }
+    popupStep = (file_url = '', e, $this = false) => {
+        if(!dont_show_popup){
+            downloadStepFirst.style.display = 'none';
+            downloadStepSuccess.style.display = 'block';
+        }
+
+        /**
+        * Template download counter
+        */
+        if(typeof anchorEvent !== 'undefined' && anchorEvent){
+            let element = anchorEvent.target;
+            if(file_url == ''){
+                var check = 2;
+                while (element && check > -1 && element.tagName !== 'A') {
+                    element = element.parentElement;
+                    check--;
+                }
+                var file_url = element.getAttribute('href');
+            }
+        }
+
+        if(file_url != ''){ 
+            if(!file_url.includes('.pdf')){
+                /**
+                 * Fire GTM call for File Download event
+                 */
+                sonaga_fire_gtm_event('file_download', ($this ? $this : e), ($this ? false : true));
+            }
+
+            if(typeof start_template_download_counting !== 'undefined'){ 
+                start_template_download_counting(file_url, e, $this);
+            } else { 
+                /**
+                 * Send the file to browser to download
+                 */
+                if(!file_url.includes('.pdf')){
+                    window.location.href = file_url;
+                } else { 
+                    e.preventDefault();
+                    const fileName = file_url.split("/").pop(); // extract file name
+                    const downloader = document.createElement("a");
+                    downloader.href = file_url;
+                    downloader.textContent = element.textContent || element.innerText || '';
+                    downloader.id = element.id || '';
+                    downloader.className = element.className || '';
+                    downloader.setAttribute("download", fileName); // force download
+                    downloader.style.display = "none";
+                    document.body.appendChild(downloader);
+                    downloader.click();
+                    document.body.removeChild(downloader);
+                }
+            }
+        }
+    }
+
+    popupStepReverse = () => {
+        downloadStepFirst.style.display = 'block';
+        downloadStepSuccess.style.display = 'none';
+    }
+
+    resetColorTheme = () => {
+        const bodyClassPopup= document.querySelector('body');
+        if(!!bodyClassPopup) {
+            // Get all classes of the body element
+            let classes = bodyClassPopup.className.split(' ');
+            // Filter out the class that starts with 'popup-theme-'
+            if(classes.length > 0){
+                let colorClasses = classes.filter(function(className) {
+                    return className.startsWith('popup-theme-');
+                });
+                
+                if(colorClasses.length > 0){
+                    document.querySelector('body').classList.remove(colorClasses);
+                }
+                // Set the new class list to the body element
+            }
+        }
+    }
+    // Popup close
+    popupClose = (className) => {
+        if (className == 'newsletter-popup-wrap' || className == 'newsletter-popup-close' || className === 'Escape') {
+            const targetElement = document.querySelector('.footer-new .newsletter-popup-wrap');
+            if (targetElement) {
+                targetElement.remove();
+                isHTMLAppended = false;
+            }
+
+            downloadPopup.style.display = 'none';
+            if (window.innerWidth > 560) {
+                enableBodyScroll();
+            }
+            if (document.querySelector('body').classList.contains('page-template-page_templates_v4') || bodyElement.classList.contains('page-template-page_templates_hub_redesign_v1') || bodyElement.classList.contains('page-template-page_templates_hub_redesign_v2') ) {
+                //templates hub experiment v1 & v2
+                resetColorTheme();
+            }
+
+            if (isiOSDevice()) {
+                let bodyShowToTopBtn = document.querySelector('body.show-to-top-btn');
+
+                if (bodyShowToTopBtn) {
+                    bodyShowToTopBtn.classList.remove('display-to-top-btn');
+                }
+            }               
+
+            resetWarning();
+        }
+    }
+    // Click Event for downable links
+    if(zipfile.length > 0){ 
+        if(!!first_call){
+            bindElementEvent();
+        }
+
+        zipfile.forEach(function (fileLink) {
+            if (!fileLink.hasAttribute('download')) {
+                const fileHref = fileLink.getAttribute('href');
+                if (fileHref) {
+                    const fileName = fileHref.split('/').pop();
+                    fileLink.setAttribute('download', fileName);
+                }
+            }
+
+            if (!fileLink.hasAttribute('data-newsletter-popup-bound')) {
+                fileLink.addEventListener('click', function (e) {
+                    // Check if the link has the 'no-popup' class
+                    if (fileLink.classList.contains('no-popup')) {
+                        dont_show_popup = true;
+                    }
+                    // Added condition for files hosted on domains outer than our own (resumegenius.com) or google doc will not trigger the download modal
+                    if(typeof fileLink.href !== 'undefined' && !fileLink.href.includes('resumegenius.com') && !fileLink.href.includes('docs.google.com')) {
+                        return;
+                    }
+                    e.preventDefault();
+                    anchorEvent = e;
+                    if(!dont_show_popup){ 
+                        submitButtonCheck = localStorage.getItem('newsletter_registered') == 1;
+                    
+                        setTimeout(() => {
+                            downloadPopup.style.display = 'flex';
+                            if (window.innerWidth > 560) {
+                                disableBodyScroll();
+                            }
+                            // Add active and display class to set seconday nav menu active and back to top display when IOS specific body scroll implemented 
+                            if (isiOSDevice()) {
+                                const activeElement = document.querySelector('li.update.active');
+                                const activeBody = document.querySelector('body.show-to-top-btn');
+                                if (activeElement) {
+                                    activeElement.classList.add('active');
+                                }
+            
+                                if (activeBody) {
+                                    activeBody.classList.add('display-to-top-btn');
+                                }
+                            }
+            
+                            let parentContPopup= fileLink.closest('.templates-sec-v2');
+                            if(!!parentContPopup) {
+                                // Get all classes of the body element
+                                let classes = parentContPopup.className.split(' ');
+                                // Filter out the class that starts with 'popup-theme-'
+                                if(classes.length !== 0){
+                                    let newClasses = classes.filter(function(className) {
+                                        return className.startsWith('popup-theme-');
+                                    });
+                                    // Set the new class list to the body element
+                                    if(newClasses.length !== 0){
+                                        document.body.classList.add(newClasses);
+                                    }
+                                }
+                            }
+            
+                            if (submitButtonCheck) {
+                                // window.location.href = fileLink.href;
+                                popupStep('', e);
+                                /**
+                                 * Fire GTM call for File Download event
+                                 */
+                                // sonaga_fire_gtm_event('file_download', e);
+                            } else {
+                                popupStepReverse();
+                                var is_quiz = fileLink.getAttribute('data-quiz') || '';
+                                btnDownloadLink.href = fileLink.href;
+                                submitButton.dataset.url = fileLink.href;
+                                submitButton.dataset.quiz = is_quiz;
+                                btnDownloadLink.dataset.quiz = is_quiz;
+                            }
+                        }, 100);
+                    } else { 
+                        setTimeout(() => {
+                            popupStep('', e);
+                            /**
+                             * Fire GTM call for File Download event
+                             */
+                            // sonaga_fire_gtm_event('file_download', e);
+                        }, 100);
+                    }
+                });
+                fileLink.setAttribute('data-newsletter-popup-bound', 'true');
+            }
+        });
+    }
+    // Function for reset all value and warning message after popup close
+    function resetWarning() {
+        emailInput.value = '';
+        nameInput.value = '';
+        if (emailInput.parentElement.classList.contains('newsletter-popup-form-input-warning')) {
+            emailInput.parentElement.classList.remove('newsletter-popup-form-input-warning');
+        }
+
+        if (nameInput.parentElement.classList.contains('newsletter-popup-form-input-warning')) {
+            nameInput.parentElement.classList.remove('newsletter-popup-form-input-warning');
+        }
+
+        if (gdprCheckbox.parentElement.classList.contains('newsletter-popup-form-checkbox-warning')) {
+            gdprCheckbox.parentElement.classList.remove('newsletter-popup-form-checkbox-warning')
+        }
+    }
+
+    function bindElementEvent() {
+
+        const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
+
+        if (!!downloadPopup) {
+            if(typeof signin_script_load === 'undefined' || signin_script_load == 0){
+                var signin_js = document.createElement("script"); 
+                signin_js.setAttribute("src", signin_url); 
+                signin_js.setAttribute("defer", true);
+                document.head.appendChild(signin_js);
+                signin_script_load = 1;  
+                }    
+
+            downloadPopup.addEventListener('click', function (e) {
+                setTimeout(() => {
+                    popupClose(e.target.classList[0]);
+                }, 0);
+            });
+            if(!!closePopup){
+                closePopup.addEventListener('click', function (e) {
+                    setTimeout(() => {
+                        popupClose(e.target.closest('.newsletter-popup-close').classList.value);
+                    }, 0);
+                });
+            }
+            if (!!noThanksBtn) {
+                noThanksBtn.addEventListener('click', function (e) {                        
+                    e.preventDefault();
+                    anchorEvent = e;
+                    // e.stopPropagation();
+                    setTimeout(() => {
+                        popupStep('', anchorEvent);
+                        /**
+                         * Fire GTM call for File Download event
+                         */
+                        // sonaga_fire_gtm_event('file_download', e);
+                    }, 0);
+                });
+
+            }
+            if(!!submitButton){ 
+                submitButton.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    setTimeout(() => {
+                        errors = 0;
+                        email = emailInput.value;
+                        // Check Name Field
+                        if (nameInput.value === '') {
+                            nameInput.parentElement.classList.add('newsletter-popup-form-input-warning');
+                            errors++;
+                        }
+                        // Check email is empty and email pattern
+                        if (emailInput.value.trim() === '') {
+                            emailInput.parentElement.classList.add('newsletter-popup-form-input-warning');
+                            emailInput.parentElement.querySelector('.newsletter-popup-form-warning').innerHTML = 'This field is required';
+                            errors++;
+                        } else if (!emailPattern.test(email)) {
+                            emailInput.parentElement.classList.add('newsletter-popup-form-input-warning');
+                            emailInput.parentElement.querySelector('.newsletter-popup-form-warning').innerHTML = 'Please enter a valid email address';
+                            errors++;
+                        } else {
+                            emailInput.parentElement.classList.remove('newsletter-popup-form-input-warning');
+                        }
+
+                        // Check checkbox is not checked
+                        if (!gdprCheckbox.checked) {
+                            gdprCheckbox.parentElement.classList.add('newsletter-popup-form-checkbox-warning');
+                            errors++
+                        }
+
+                        // Check No error found and proceed to next screen of popup
+                        if (errors === 0) {
+                            emailInput.parentElement.classList.remove('newsletter-popup-form-input-warning');
+                            gdprCheckbox.parentElement.classList.remove('newsletter-popup-form-checkbox-warning');
+                                popup_createGuestUser();
+                            if (!submitButtonCheck) {
+                                // window.location = this.dataset.url;
+                                popupStep(this.dataset.url, e, this);
+                                submitButtonCheck = true;
+                                /**
+                                 * Fire GTM call for File Download event
+                                 */
+                                // sonaga_fire_gtm_event('file_download', this, false);
+                            }
+                            NEWSLETTER_TRACK_EVENT.init(e.target.innerText);
+                        }
+                    }, 0);
+                });
+            }
+            if(!!emailInput){ 
+                emailInput.addEventListener('input', function() {
+                    setTimeout(() => {
+                    if (emailInput.parentElement.classList.contains('newsletter-popup-form-input-warning')) {
+                        emailInput.parentElement.classList.remove('newsletter-popup-form-input-warning');
+                    }
+                    }, 0);
+                });
+            }
+            if(!!nameInput){ 
+                nameInput.addEventListener('input', function() {
+                    setTimeout(() => {
+                    if (nameInput.parentElement.classList.contains('newsletter-popup-form-input-warning')) {
+                        nameInput.parentElement.classList.remove('newsletter-popup-form-input-warning');
+                    }
+                    }, 0);
+                });
+            }
+            
+            // Popup Close on Esc button
+            window.addEventListener(`keydown`, function(e) {
+                if( e.key === 'Escape' && downloadPopup.style.display !== 'none') {
+                    setTimeout(() => {
+                    resetWarning();
+                    if (document.querySelector('body').classList.contains('page-template-page_templates_v4') || bodyElement.classList.contains('page-template-page_templates_hub_redesign_v1') || bodyElement.classList.contains('page-template-page_templates_hub_redesign_v2')) {
+                        //templates hub experiment v1 & v2
+                        resetColorTheme();
+                    }
+                    downloadPopup.style.display = 'none';
+                    }, 0);
+                }
+            });
+
+            // Removing warning message after checkbox checked
+            if(!!gdprCheckbox){ 
+                gdprCheckbox.addEventListener('change', function(event) {
+                    setTimeout(() => {
+                    if (event.target.checked && gdprCheckbox.parentElement.classList.contains('newsletter-popup-form-checkbox-warning')) {
+                        gdprCheckbox.parentElement.classList.remove('newsletter-popup-form-checkbox-warning')
+                    }
+                    }, 0);
+                });
+            }
+        }
+    }
+     function popup_createGuestUser(){ 
+	    if( localStorage.getItem('newsletter_registered') === null ){
+            localStorage.setItem('newsletter_registered', 1);
+            const newsletter_form_sideabar = document.getElementById('newsletter-form-sidebar');
+            if(newsletter_form_sideabar){
+               newsletter_form_sideabar.style.display = 'none';  
+            }
+            const  sidebar_container = document.querySelector('.multiple-sidebar');
+            if(sidebar_container){
+                sidebar_container.classList.add('only-author-card');
+            }
+	    }
+        let fullName = document.querySelector('.newsletter-popup-form-input-name').value.trim();
+        let email = document.querySelector('.newsletter-popup-form-input-mail').value.trim();
+        let names = fullName.split(" ");
+        let fname = "";
+        let lname = "";
+        if (names.length === 1){
+            fname = names[0];
+        } else if (names.length >= 2){
+            fname = names[0];
+            lname = names.slice(1).join(" ");
+        }
+        let timerID;
+        clearInterval(timerID);
+        timerID = setInterval(function () 
+        {
+            if (typeof SIGNIN == "object" && typeof SIGNIN.Accounts.createGuest == 'function') 
+            { 	
+                clearInterval(timerID);                
+                SIGNIN.Accounts.createGuest("RBG", null,location.href, null, null, fname, lname, email,1,null,{'event_source' : 'newsletter download subscribe','url' :location.href ,'email' :email});                
+            }
+        }, 500);
+     }
+     function sonaga_ga4_track(eventName, attr = {}, elem = '') {
+        if (eventName != '') {
+            var obj = Object.assign(attr, {
+                send_to: 'G-P9V9CKTWBL' 
+            });
+            if (typeof gtag != 'undefined') {
+                gtag("event", eventName, obj)
+            }
+        }
+        return !0
+    }
+    function sonaga_get_file_extension_from_url(url) {
+        if(url != '' && url != null){ 
+            const urlWithoutDomainAndQuery = url.split('?')[0];  // Remove query string if present
+            // Find the last occurrence of '.' and get the substring after it
+            const lastDotIndex = urlWithoutDomainAndQuery.lastIndexOf('.');
+            
+            // Check if there's a dot in the URL (to avoid errors)
+            if (lastDotIndex === -1) return '';  // Return empty string if no dot is found
+        
+            // Extract the extension (substring after the last dot)
+            return urlWithoutDomainAndQuery.substring(lastDotIndex + 1);
+        }
+    }
+    function sonaga_remove_domain_and_query_param(url) {
+        if(url != '' && url != null){ 
+            // Remove the domain (protocol, hostname, and port) and query string
+            const urlWithoutDomainAndQuery = url.split('?')[0];  // Remove query string if present
+            const pathOnly = urlWithoutDomainAndQuery.split('.com')[1];  // Remove protocol and domain
+            
+            return pathOnly;
+        }
+    }
+
+    function sonaga_fire_gtm_event(event_name, t, is_link = true) {
+        setTimeout(() => {
+            /**
+             * Check if the analytics consent is given
+             */
+            if(typeof gdpr_consent === 'undefined')
+            {
+                if(typeof readCookie == 'undefined'){ 
+                    window.readCookie = function(name) {
+                        var nameEQ = name + '=';
+                        var ca = document.cookie.split(';');
+                        
+                        for (var i = 0; i < ca.length; i++) {
+                            var c = ca[i];
+                            while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+                            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+                        }
+                        return null;
+                    }
+                } 
+                var consent_cookie_val =  readCookie('user_consent');
+                var gdpr_consent = consent_cookie_val || localStorage.getItem('COOKIE_CONSENT');
+                gdpr_consent = gdpr_consent && JSON.parse(gdpr_consent) || null;
+            }
+            if (!gdpr_consent || (gdpr_consent && gdpr_consent.consent && gdpr_consent.consent.analytics)) {    
+                if(is_link){ 
+                    let element = t.target;
+                    var check = 2;
+                    while (element && check > -1 && element.tagName !== 'A') {
+                        element = element.parentElement;
+                        check--;
+                    }
+                    t = element;
+                }
+                var elemHref = is_link ? t.getAttribute('href') : t.dataset.url;
+                var is_quiz = is_link ? t.getAttribute('data-quiz') : t.dataset.quiz;
+                
+                if(is_quiz && elemHref) {
+                    const separator = elemHref.includes('?') ? '&' : '?';
+                    elemHref = elemHref + separator + 'source=quiz';                    
+                }
+
+                if (event_name != '' && elemHref !== '') {
+                    eventAttr = Object.assign({
+                        link_url: elemHref,
+                        link_text: t.innerText,
+                        link_id: t.getAttribute("id"),
+                        link_classes: t.getAttribute("class"),
+                        file_name: sonaga_remove_domain_and_query_param(elemHref),
+                        file_extension: sonaga_get_file_extension_from_url(elemHref)
+                    });
+                    sonaga_ga4_track(event_name, eventAttr, t);
+                }
+            }
+        }, 0);
+    }
+}
+
+function createNewsletterPopup(popupData) {
+    // Helper function to safely escape HTML entities
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    // Create list items HTML
+    let listItemsHtml = '';
+    if (Array.isArray(popupData.list_items) && popupData.list_items.length > 0) {
+        listItemsHtml = `
+            <div class="newsletter-popup-list-wrap">
+                <p class="newsletter-popup-list-title body-xs">${escapeHtml(popupData.form_bottom_list_title || '')}</p>
+                <ul class="newsletter-popup-list body-sm-strong">
+                    ${popupData.list_items.map(item => `
+                        <li>
+                            <svg class="newsletter-popup-list-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 0.500122C9.03754 0.500122 11.5 2.96255 11.5 6.00012C11.5 9.03766 9.03754 11.5001 6 11.5001C2.96243 11.5001 0.5 9.03766 0.5 6.00012C0.5 2.96255 2.96243 0.500122 6 0.500122ZM7.94447 4.00987L5.22208 6.73223L4.05537 5.56551C3.84058 5.35074 3.49235 5.35074 3.27755 5.56551C3.06277 5.78029 3.06277 6.12855 3.27755 6.34332L4.7943 7.86006C5.03057 8.09634 5.41364 8.09634 5.64992 7.86006L8.72228 4.78769C8.93706 4.5729 8.93706 4.22466 8.72228 4.00987C8.50751 3.79508 8.15925 3.79508 7.94447 4.00987Z" fill="#52575E"/>
+                            </svg>
+                            ${escapeHtml(item.list_item || '')}
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    // Build multi CTA buttons for second popup
+    let multiCTAsHtml = '';
+    if (
+        (popupData.second_popup_first_cta_url && popupData.second_popup_first_cta_text) ||
+        (popupData.second_popup_second_cta_url && popupData.second_popup_second_cta_text)
+    ) {
+        multiCTAsHtml = '<div class="newsletter-popup-multicta">';
+        if (popupData.second_popup_first_cta_url && popupData.second_popup_first_cta_text) {
+            const firstCTANoFollow = popupData.second_popup_first_cta_url_is_external
+                ? ' target="_blank" rel="nofollow noopener"'
+                : '';
+            multiCTAsHtml += `<a class="btn btn-no-animation btn-outline-orange btn-medium" href="${escapeHtml(popupData.second_popup_first_cta_url)}"${firstCTANoFollow}>${escapeHtml(popupData.second_popup_first_cta_text)}</a>`;
+        }
+        if (popupData.second_popup_second_cta_url && popupData.second_popup_second_cta_text) {
+            const secondCTANoFollow = popupData.second_popup_second_cta_url_is_external
+                ? ' target="_blank" rel="nofollow noopener"'
+                : '';
+            multiCTAsHtml += `<a class="btn btn-no-animation btn-secondary-multi btn-medium" href="${escapeHtml(popupData.second_popup_second_cta_url)}"${secondCTANoFollow}>${escapeHtml(popupData.second_popup_second_cta_text)}</a>`;
+        }
+        multiCTAsHtml += '</div>';
+    }
+
+    // Compose the full HTML content (mirrors PHP)
+    const htmlContent = `
+        
+            <div class="newsletter-popup"> 
+                <span class="newsletter-popup-close">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20.0538 18.7022L17.3515 15.9998L20.0538 13.2975C20.233 13.1183 20.3337 12.8753 20.3337 12.6219C20.3337 12.3685 20.233 12.1255 20.0538 11.9463C19.8746 11.7672 19.6316 11.6665 19.3782 11.6665C19.1248 11.6665 18.8818 11.7672 18.7027 11.9463L16.0003 14.6487L13.298 11.9463C13.1188 11.7672 12.8758 11.6665 12.6224 11.6665C12.369 11.6665 12.126 11.7672 11.9468 11.9463C11.7677 12.1255 11.667 12.3685 11.667 12.6219C11.667 12.8753 11.7677 13.1183 11.9468 13.2975L14.6492 15.9998L11.9468 18.7022C11.7677 18.8813 11.667 19.1244 11.667 19.3778C11.667 19.6311 11.7677 19.8742 11.9468 20.0533C12.126 20.2325 12.369 20.3332 12.6224 20.3332C12.8758 20.3332 13.1188 20.2325 13.298 20.0533L16.0003 17.351L18.7027 20.0533C18.8818 20.2325 19.1248 20.3332 19.3782 20.3332C19.6316 20.3332 19.8746 20.2325 20.0538 20.0533C20.233 19.8742 20.3337 19.6311 20.3337 19.3778C20.3337 19.1244 20.233 18.8813 20.0538 18.7022Z" fill="#ffffff"/>
+                    </svg>
+                </span>
+
+                <!-- STEP 1 -->
+                <div class="newsletter-popup-step newsletter-popup-step-1">
+                    <div class="newsletter-popup-head">
+                        ${popupData.popup_title ? `<p class="newsletter-popup-sub-title caption-02">${escapeHtml(popupData.popup_title)}</p>` : ''}
+                        ${popupData.popup_heading ? `<h2 class="title-sm newsletter-popup-title">${escapeHtml(popupData.popup_heading)}</h2>` : ''}
+                        ${popupData.popup_text ? `<p class="newsletter-popup-text body-sm">${escapeHtml(popupData.popup_text)}</p>` : ''}
+                    </div>
+
+                    <form class="newsletter-popup-form">
+                        <div class="newsletter-popup-form-wrap">
+                            ${popupData.form_top_text ? `<p class="newsletter-popup-form-title body-sm">${escapeHtml(popupData.form_top_text)}</p>` : ''}
+
+                            <div class="newsletter-popup-form-inputs">
+                                <div class="newsletter-popup-form-input-wrap">
+                                    <input type="text" class="newsletter-popup-form-input body-sm newsletter-popup-form-input-name" placeholder="Your name*">
+                                    <span class="newsletter-popup-form-warning body-xs">This field is required</span>
+                                </div>
+                                <div class="newsletter-popup-form-input-wrap">
+                                    <input type="email" class="newsletter-popup-form-input body-sm newsletter-popup-form-input-mail" placeholder="Your email*">
+                                    <span class="newsletter-popup-form-warning body-xs">This field is required</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${listItemsHtml}
+
+                        <div class="newsletter-popup-gdpr body-sm">
+                            <input type="checkbox" id="newsletter-popup-gdpr-input">
+                            ${popupData.consent_text ? `<label for="newsletter-popup-gdpr-input" class="newsletter-popup-gdpr-text">${popupData.consent_text}</label><label class="newsletter-popup-gdpr-warning body-xs"><span class="warning-icon"></span> Please check this box if you want to proceed</label>` : ''}
+                        </div>
+
+                        <div class="newsletter-popup-ctas">
+                            <button class="btn btn-no-animation btn-medium btn-secondary-multi">${escapeHtml(popupData.first_popup_cta_text || '')}</button>
+                            ${popupData.cta_bottom_text ? `<a href="#" class="btn-underline body-xs-strong no-thanks-text" download>${escapeHtml(popupData.cta_bottom_text)}</a>` : ''}
+                        </div>
+                    </form>
+
+                    ${popupData.disclaimer_text ? `<p class="newsletter-popup-info body-xs"><span class="newsletter-popup-info-terms">*</span>${escapeHtml(popupData.disclaimer_text)}</p>` : ''}
+                </div>
+
+                <!-- STEP 2 -->
+                <div class="newsletter-popup-step newsletter-popup-step-2">
+                    <div class="newsletter-popup-content">
+                        <div class="newsletter-popup-head">
+                            ${popupData.second_popup_heading ? `<h2 class="title-sm newsletter-popup-title">${escapeHtml(popupData.second_popup_heading)}</h2>` : ''}
+                            ${popupData.second_popup_description ? `<p class="newsletter-popup-text body-sm">${escapeHtml(popupData.second_popup_description)}</p>` : ''}
+                        </div>
+                        ${multiCTAsHtml}
+                    </div>
+                </div>
+            </div>
+        
+    `;
+    return htmlContent;
+}
+
+function callNewsletterPopup(){
+    const html = createNewsletterPopup(popupData);
+    const targetContainer = document.querySelector('.newsletter-popup-wrap');
+    if (targetContainer) {
+        // Append the generated HTML inside the target div
+        targetContainer.insertAdjacentHTML('beforeend', html);
+        if (!!document.getElementById('newsletter-popup-wrap')) {
+            window.downloadPopupForm(true);
+        }
+    }
+}
+
+callNewsletterPopup();
+
+// Initialize the segment tracking for newsletter popup
+var NEWSLETTER_TRACK_EVENT = {
+    init: function(ctaName){
+        var eventAttr = {
+            'path': window.location.pathname,
+            'cta name': ctaName,
+        };
+        NEWSLETTER_TRACK_EVENT.sendSegmentEvent('landing page cta clicks', eventAttr);
+
+    },
+    getUserInformationFromCookie: function(userinfoCookie) {
+			let userStatus = NEWSLETTER_TRACK_EVENT.readCookieVal(userinfoCookie);
+			userStatus = decodeURIComponent(userStatus);
+			if (userStatus) {
+				userStatus = JSON.parse(userStatus);
+				return userStatus;
+			}
+			return {};
+    },
+    readCookieVal: function(name) {
+        var nameEQ = name + '=';
+        var ca = document.cookie.split(';');
+        
+        for (var i = 0; i < ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    },
+    sendSegmentEvent: function(eventName, eventAttr) {        
+        setTimeout(() => { 
+            const userInformation = NEWSLETTER_TRACK_EVENT.getUserInformationFromCookie('userinf');
+			const IsUserLoggedIn = userInformation && userInformation.IsUserLoggedIn ? userInformation.IsUserLoggedIn : false;
+            var user_country = decodeURIComponent(NEWSLETTER_TRACK_EVENT.readCookieVal('x-georegion'));
+            user_country = user_country.split(",");
+            var country = user_country[1] ? user_country[1].toUpperCase() : '';
+            // var country = user_country[0] ? user_country[0].toUpperCase() : '';
+
+            eventAttr['country'] = country;
+            eventAttr['action'] = 'newsletter signup';
+            eventAttr['login status'] = IsUserLoggedIn ? 'true' : 'false';
+            eventAttr['portal code'] = 'RGN';
+            // eventAttr['medium'] = 'SEO';
+            eventAttr['visitor type'] = NEWSLETTER_TRACK_EVENT.readCookieVal('vstrType') ? 'Returning' : 'New';
+            eventAttr['page type'] = 'SEO';
+             eventAttr['current url'] = window.location.href;
+
+            eventAttr['device'] = (
+                /iPad|Tablet|PlayBook|Silk|Kindle|Nexus 7|Nexus 10|SM-T|Tab/i.test(navigator.userAgent) ||
+                // iPad Pro in desktop mode
+                (navigator.userAgent.includes('Macintosh') && 'ontouchend' in document)
+            )
+                ? 'tablet'
+                : /Mobi|Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                    ? 'mobile'
+                    : 'desktop';
+
+            eventAttr['os'] = (function() {
+                const ua = navigator.userAgent;
+                if (/windows phone/i.test(ua)) return 'Windows Phone';
+                if (/win/i.test(ua)) return 'Windows';
+                if (/android/i.test(ua)) return 'Android';
+                if (/iPad|iPhone|iPod/.test(ua)) return 'iOS';
+                if (/mac/i.test(ua)) return 'MacOS';
+                if (/linux/i.test(ua)) return 'Linux';
+                return 'Other';
+            })();
+
+            eventAttr['browser'] = (function() {
+                const ua = navigator.userAgent;
+                if (/chrome|crios|crmo/i.test(ua) && !/edge|edg|opr|opera/i.test(ua)) return 'Chrome';
+                if (/firefox|fxios/i.test(ua)) return 'Firefox';
+                if (/safari/i.test(ua) && !/chrome|crios|crmo|android/i.test(ua)) return 'Safari';
+                if (/edg|edge/i.test(ua)) return 'Edge';
+                if (/opr|opera/i.test(ua)) return 'Opera';
+                if (/msie|trident/i.test(ua)) return 'Internet Explorer';
+                return 'Other';
+            })();
+
+            eventAttr['portal'] = 'ResumeGenius';
+            console.log('Sending Segment Event:', eventName, eventAttr);
+            if (window.TrackEvents && window.analytics) {
+				TrackEvents(eventName, eventAttr, null, false);
+			} else {
+				var segmentLoadTimer = setInterval(function () {
+					if (window.TrackEvents && window.analytics) {
+                        clearInterval(segmentLoadTimer);
+                        TrackEvents(eventName, eventAttr, null, false);
+                    }
+				}, 50);
+			}
+        }, 0);
+        
+    }
+};

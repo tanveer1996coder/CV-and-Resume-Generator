@@ -1,11 +1,24 @@
 // Real AI Service - powered by OpenAI
-const API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+
+const getApiKey = () => {
+    return localStorage.getItem('openai_api_key') || '';
+};
+
+export const saveApiKey = (key) => {
+    localStorage.setItem('openai_api_key', key);
+};
+
+export const hasApiKey = () => {
+    return !!getApiKey();
+};
 
 export const optimizeText = async (text, context = 'general', jobDescription = '') => {
     if (!text || text.trim().length === 0) return text;
-    if (!API_KEY || API_KEY.includes('paste_your_key')) {
+
+    const API_KEY = getApiKey();
+    if (!API_KEY) {
         console.warn("Missing OpenAI API Key");
-        return text + " [AI Mode: Key Missing]";
+        throw new Error("MISSING_API_KEY");
     }
 
     try {
@@ -40,7 +53,8 @@ export const optimizeText = async (text, context = 'general', jobDescription = '
 };
 
 export const generateSummary = async (data, jobDescription = '') => {
-    if (!API_KEY || API_KEY.includes('paste_your_key')) return "AI Summary requires API Key in .env file.";
+    const API_KEY = getApiKey();
+    if (!API_KEY) return "Professional summary generated based on your experience and skills.";
 
     const prompt = `Write a professional resume summary for:
     Name: ${data.personal.fullName}

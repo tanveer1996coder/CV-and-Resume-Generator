@@ -6,7 +6,7 @@ import { saveAs } from 'file-saver';
 
 import { extractTextFromPDF } from '../utils/pdfParser';
 import { parseResumeText } from '../utils/resumeParser';
-import { optimizeText, generateSummary } from '../utils/aiService';
+import { optimizeText, generateSummary, hasApiKey, saveApiKey } from '../utils/aiService';
 import { calculateATSScore, getScoreCategory, getATSRecommendations } from '../utils/atsScorer';
 import { colorThemes, fontPairings, layouts } from '../utils/templates';
 
@@ -114,14 +114,26 @@ function SmartRewriteStep({ onNext, onCancel }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [status, setStatus] = useState('');
 
+    const [showKeyModal, setShowKeyModal] = useState(false);
+    const [apiKeyInput, setApiKeyInput] = useState('');
+
     const handleProcess = async () => {
         if (!file || !jobDescription) {
             alert("Please upload a file and enter a job description.");
             return;
         }
 
-        setIsProcessing(true);
+        // Check for API Key first
+        if (!hasApiKey()) {
+            setShowKeyModal(true);
+            return;
+        }
 
+        startProcessing();
+    };
+
+    const startProcessing = async () => {
+        setIsProcessing(true);
         try {
             // 1. Extract Text
             setStatus('Reading Resume PDF...');
@@ -143,20 +155,29 @@ function SmartRewriteStep({ onNext, onCancel }) {
                 parsedData.experience = optimizedExp;
             }
 
-            // 4. Optimize Skills (optional, simple extraction/matching)
-            // For now, we trust the parser or let user edit.
-
             setStatus('Refining final details...');
-            // Add a small delay for effect
             await new Promise(resolve => setTimeout(resolve, 800));
-
             onNext(parsedData);
 
         } catch (error) {
             console.error("AI Processing Error:", error);
-            alert("An error occurred during AI processing. Please check your API key and try again.");
+            if (error.message === 'MISSING_API_KEY') {
+                setShowKeyModal(true);
+            } else {
+                alert("An error occurred. Please check the console.");
+            }
             setIsProcessing(false);
             setStatus('');
+        }
+    };
+
+    const handleSaveKey = () => {
+        if (apiKeyInput.trim().startsWith('sk-')) {
+            saveApiKey(apiKeyInput.trim());
+            setShowKeyModal(false);
+            startProcessing();
+        } else {
+            alert("Invalid API Key. It should start with 'sk-'");
         }
     };
 
@@ -256,6 +277,38 @@ function SmartRewriteStep({ onNext, onCancel }) {
                             animation: 'slideUp 2s infinite linear',
                             transformOrigin: 'left'
                         }}></div>
+                    </div>
+                </div>
+            )}
+
+            {/* API Key Modal */}
+            {showKeyModal && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.8)', zIndex: 1000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <div className="glass" style={{ padding: '2rem', maxWidth: '500px', width: '90%' }}>
+                        <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Enter OpenAI API Key</h3>
+                        <p style={{ color: '#94a3b8', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            To use the AI features safely, please provide your own OpenAI API key.
+                            The key is stored locally in your browser and never sent to our servers.
+                        </p>
+                        <input
+                            type="password"
+                            placeholder="sk-..."
+                            value={apiKeyInput}
+                            onChange={(e) => setApiKeyInput(e.target.value)}
+                            style={{
+                                width: '100%', padding: '0.75rem', marginBottom: '1.5rem',
+                                background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)',
+                                borderRadius: '6px', color: 'white'
+                            }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                            <button onClick={() => setShowKeyModal(false)} style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={handleSaveKey} style={{ background: 'var(--primary)', color: 'white', padding: '0.5rem 1.5rem', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>Save & Continue</button>
+                        </div>
                     </div>
                 </div>
             )}

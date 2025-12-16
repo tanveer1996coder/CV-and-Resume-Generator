@@ -8,6 +8,12 @@
   --font-main: 'Inter', system-ui, sans-serif;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: var(--font-main);
@@ -90,7 +96,7 @@ button {
 
 ::-webkit-scrollbar-thumb {
   background: #334155;
-  borderRadius: 4px;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {

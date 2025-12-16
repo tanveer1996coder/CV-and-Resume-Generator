@@ -19,9 +19,14 @@ export const extractTextFromPDF = async (file) => {
             fullText += pageText + '\n';
         }
 
+        if (!fullText || fullText.trim().length < 10) {
+            throw new Error("PDF_TEXT_EMPTY");
+        }
+
         return fullText;
     } catch (error) {
         console.error("Error extracting text from PDF:", error);
+        if (error.message === "PDF_TEXT_EMPTY") throw error; // Re-throw specific error
         throw new Error("Failed to parse PDF");
     }
 };
